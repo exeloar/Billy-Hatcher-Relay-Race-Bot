@@ -266,13 +266,12 @@ def refreshCurrentAudio():
             os.rename(oldFile,f"resources/team{newTeam+1}-activeaudioicon.png")
         else:
             copy("resources/ActiveAudioIcon.png",f"resources/team{newTeam+1}-activeaudioicon.png")
-            
-    for i in range(3):
-        for j in range(4):
-            if not currentAudioPlayer == teams[i][j]:
-                ws.call(requests.SetMute(teams[i][j].split("#")[0],True))
-    
-    ws.call(requests.SetMute(currentAudioPlayer.split("#")[0],False))
+    if OBS_ENABLED:     
+        for i in range(3):
+            for j in range(4):
+                if not currentAudioPlayer == teams[i][j]:
+                    ws.call(requests.SetMute(teams[i][j].split("#")[0],True))
+        ws.call(requests.SetMute(currentAudioPlayer.split("#")[0],False))
 
     
 
@@ -366,13 +365,14 @@ def updateCurrentPlayer():
             file.write(str(teams[team][currentPlayer[team]].split("#")[0]))
 
 def refreshHiddenSources():
-    for team in range(len(teams)):
-        if teamFinished[team]:
-            for player in range(len(teams[team])):
-                '''
-                The idea is to have teams that are complete not have streams up behind their final times, but idk how to do it unfortunately.
-                '''
-                #ws.call(requests.getSource(teams[team][player].split("#")[0]).makeInvisible())
+    if OBS_ENABLED:
+        for team in range(len(teams)):
+            if teamFinished[team]:
+                for player in range(len(teams[team])):
+                    '''
+                    The idea is to have teams that are complete not have streams up behind their final times, but idk how to do it unfortunately.
+                    '''
+                    #ws.call(requests.getSource(teams[team][player].split("#")[0]).makeInvisible())
 
 
 
@@ -468,12 +468,11 @@ def RelayFinished():
         if os.path.exists(file[1]):
             os.remove(file[1])
 
-    for i in range(3):
-        for j in range(4):
-            if not currentAudioPlayer == teams[i][j]:
-                ws.call(requests.SetMute(teams[i][j].split("#")[0],True))
-
     if OBS_ENABLED:
+        for i in range(3):
+            for j in range(4):
+                if not currentAudioPlayer == teams[i][j]:
+                    ws.call(requests.SetMute(teams[i][j].split("#")[0],True))
         ws.call(requests.SetCurrentScene("Relay Finished"))
 
     relayFinished = True
