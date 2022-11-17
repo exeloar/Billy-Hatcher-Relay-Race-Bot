@@ -2,12 +2,13 @@ from tkinter import N
 from turtle import update
 import discord
 from discord.ext import commands
-#from pynput.keyboard import Key, Controller
 from obswebsocket import obsws, requests 
 from datetime import datetime
 from random import randint, choice, seed
 from time import sleep
 from pandas import Timestamp, Timedelta
+from shutil import copy
+import os
 import livesplit
 
 admins = [
@@ -18,6 +19,7 @@ admins = [
 ]
 LIVESPLIT_ENABLED = False
 OBS_ENABLED = True
+BOT_CHANNEL_ID = 0
 
 
 if LIVESPLIT_ENABLED:
@@ -65,10 +67,15 @@ teamFinished = [
     False,
     False
 ]
+relayFinished = True # Used to check for synchronization 
 currentAudioPlayer = teams[0][0]
 
 with open('resources/token.txt', 'r') as file:
     TOKEN = file.read()
+with open('resources/BotChannelID.txt', 'r') as file:
+    BOT_CHANNEL_ID = int(file.read())
+
+copy("resources/ActiveAudioIcon.png",f"resources/team1-activeaudioicon.png")
 
 def isAdmin(ctx):
     return str(ctx.author) in admins
@@ -122,7 +129,21 @@ async def handle_command(ctx):
                 currentPlayer[i] = int(playerVals[i])
             switchToScene()
             return
-            
+
+    if ctx.content == "!forcereset":
+        if isAdmin(ctx):
+            resetState()
+    
+    if ctx.content == "!forcestart":
+        if isAdmin(ctx):
+            teamReady[0] = True
+            teamReady[1] = True
+            teamReady[2] = True
+            await ctx.channel.send("GO!")
+            startTime = datetime.now()
+            if LIVESPLIT_ENABLED:
+                timer.startTimer()
+            isStarted = True
 
     if ctx.content == "!start":
         ready = True
@@ -204,14 +225,17 @@ async def handle_command(ctx):
             Team #3: {teamEmblemCounts[2]} emblems, current player {teams[2][currentPlayer[2]]}")
         return
 
-def refreshFinalTimes(team, time):
-        with open(f'resources/team{team+1}-finaltime.txt', 'w') as file:
-            TOKEN = file.write((teamTimes[team] - startTime + Timestamp("00:00:00")).strftime("%H:%M:%S"))
+def refreshFinalTimes(team, clear = False):
+    with open(f'resources/team{team+1}-finaltime.txt', 'w') as file:
+        if clear:
+            file.write("")
+        else:
+            file.write((teamTimes[team] - startTime + Timestamp("00:00:00")).strftime("%H:%M:%S"))
 
 def refreshEmblemCounts(teams = [0,1,2]):
     for team in teams:
         with open(f'resources/team{team+1}-emblemcount.txt', 'w') as file:
-            TOKEN = file.write("x"+str(teamEmblemCounts[team]))
+            file.write("x"+str(teamEmblemCounts[team]))
 
 def refreshCurrentAudio():
     global currentAudioPlayer
@@ -222,12 +246,27 @@ def refreshCurrentAudio():
             currentTeam = i
             break
     if not currentPlayer[currentTeam] == teams[currentTeam].index(currentAudioPlayer):
-        options = [0,1,2]
-        options.remove(currentTeam)
+        options = []
+        for team in range(len(teamEmblemCounts)):
+            if not teamEmblemCounts[team] == 56 and not team == currentTeam:
+                options.append(team)
+        
+        if len(options) == 0 and not teamEmblemCounts[currentTeam] == 56:
+            options.append(currentTeam)
+
+        if len(options) == 0:
+            return
+        
         newTeam = choice(options)
         currentAudioPlayer = teams[newTeam][currentPlayer[newTeam]]
-        
 
+        oldFile = f"resources/team{currentTeam+1}-activeaudioicon.png"
+
+        if os.path.exists(oldFile):
+            os.rename(oldFile,f"resources/team{newTeam+1}-activeaudioicon.png")
+        else:
+            copy("resources/ActiveAudioIcon.png",f"resources/team{newTeam+1}-activeaudioicon.png")
+            
     for i in range(3):
         for j in range(4):
             if not currentAudioPlayer == teams[i][j]:
@@ -258,13 +297,17 @@ async def nextCommand(team, player, ctx):
     if teamEmblemCounts[team] == 56:
         teamTimes[team] = datetime.now()
         teamFinished[team] = True
-        if all(teamFinished) and LIVESPLIT_ENABLED:
-            timer.stopTimer()
-        refreshFinalTimes(team, teamTimes[team])
+        refreshFinalTimes(team)
         await ctx.channel.send(f'Team #{team+1} has finished with a time of {(teamTimes[team] - startTime + Timestamp("00:00:00")).strftime("%H:%M:%S")}')
-
+        if all(teamFinished):
+            if LIVESPLIT_ENABLED:
+                timer.stopTimer()
+            RelayFinished()
+            switchToScene("Relay Finished")
+            await ctx.channel.send("Everyone is Finished!")
+            return
+        
     switchToScene()
-    refreshCurrentAudio()
 
 async def prevCommand(team, player, ctx):
     global currentScene
@@ -272,6 +315,7 @@ async def prevCommand(team, player, ctx):
     global teamTimes
     global startTime
     global currentPlayer
+    global relayFinished
     
     if teamEmblemCounts[team] == 0:
         return
@@ -282,17 +326,22 @@ async def prevCommand(team, player, ctx):
     currentPlayer[team] = player
 
     teamEmblemCounts[team]-=1
+    prevPlayer = teams[team][player].split("#")[0]
+    await ctx.channel.send(f"Revert team #{team+1} earning emblem #{teamEmblemCounts[team] + 1}. {prevPlayer} is now the current player")
 
-    
-    await ctx.channel.send(f"Revert team #{team+1} earning emblem #{teamEmblemCounts[team] + 1}")
+    with open(f'resources/team{team+1}-emblemcount.txt', 'w') as file:
+        file.write("x"+str(teamEmblemCounts[team]))
 
-    with open(f'team{team+1}.txt', 'w') as file:
-        file.write(str(teamEmblemCounts[team]))
-
+    if all(teamFinished):
+        while not relayFinished:
+            sleep(1)
+        relayFinished = False
+        
+    if teamFinished:
+        teamFinished[team] = False
+        teamTimes[team] = 0
+        refreshFinalTimes(team,True)
     switchToScene()
-
-async def prev(team, player, ctx):
-    print("oops")
 
 
 def readyCommand(team):
@@ -314,18 +363,31 @@ def updateSceneName():
 def updateCurrentPlayer():
     for team in range(3):
         with open(f'resources/team{team+1}-currentplayer.txt', 'w') as file:
-            TOKEN = file.write(str(teams[team][currentPlayer[team]].split("#")[0]))
+            file.write(str(teams[team][currentPlayer[team]].split("#")[0]))
 
-def switchToScene():
-    # Use global hotkey to switch scene
-    #keyboard.press(sceneToKeyPressDict[currentScene])
-    #keyboard.release(sceneToKeyPressDict[currentScene])
+def refreshHiddenSources():
+    for team in range(len(teams)):
+        if teamFinished[team]:
+            for player in range(len(teams[team])):
+                '''
+                The idea is to have teams that are complete not have streams up behind their final times, but idk how to do it unfortunately.
+                '''
+                #ws.call(requests.getSource(teams[team][player].split("#")[0]).makeInvisible())
+
+
+
+def switchToScene(sceneName = ""):
+    global currentScene
 
     updateSceneName()
+    if not sceneName == "":
+        currentScene = sceneName
     print(f"Switching Scenes to {currentScene}")
     updateCurrentPlayer()
     if OBS_ENABLED:
         ws.call(requests.SetCurrentScene(currentScene))
+    refreshCurrentAudio()
+    refreshHiddenSources()
 
 def resetState():
     global startTime
@@ -335,6 +397,7 @@ def resetState():
     global teamTimes
     global teamReady
     global isStarted
+    global relayFinished
 
     isStarted = False
     startTime = 0
@@ -359,6 +422,7 @@ def resetState():
         False,
         False
     ]
+    relayFinished = False
     updateSceneName()
     
 client = discord.Client(intents = discord.Intents(message_content = True, messages=True, voice_states=True, guilds=True))
@@ -369,7 +433,6 @@ def refreshCommentators():
     with open(f'resources/commentators.txt', 'w') as file:
         for commentator in commentators:
             file.write(commentator+"\n")
-
 
 @client.event
 async def on_voice_state_update(member, before, after):
@@ -384,7 +447,7 @@ async def on_voice_state_update(member, before, after):
 
 @client.event
 async def on_ready():
-    channel = client.get_channel(1041437145329582161)
+    channel = client.get_channel(BOT_CHANNEL_ID)
     await channel.send('Bot is initialized')
 
 @client.event
@@ -393,13 +456,32 @@ async def on_message(ctx):
         return
     await handle_command(ctx)
 
+def RelayFinished():
+    global relayFinished
+
+    for team in range(3):
+        file = [f'resources/team{team+1}-currentplayer.txt',f'resources/team{team+1}-activeaudioicon.png']
+
+        if os.path.exists(file[0]):
+            os.remove(file[0])
+
+        if os.path.exists(file[1]):
+            os.remove(file[1])
+
+    for i in range(3):
+        for j in range(4):
+            if not currentAudioPlayer == teams[i][j]:
+                ws.call(requests.SetMute(teams[i][j].split("#")[0],True))
+
+    if OBS_ENABLED:
+        ws.call(requests.SetCurrentScene("Relay Finished"))
+
+    relayFinished = True
+    
+
 print("Bot is initialized")
 refreshEmblemCounts()
 refreshCommentators()
-refreshCurrentAudio()
 switchToScene()
 
 client.run(TOKEN)
-
-
-
