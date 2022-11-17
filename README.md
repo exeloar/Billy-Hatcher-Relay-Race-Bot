@@ -28,14 +28,9 @@ python get-pip.py
 pip --version
 ```
 
-Now install the OBS python interface using
+Install dependencies:
 ```bash
 pip install obs-websocket-py
-```
-
-Install other dependencies:
-```bash
-# pip install pynput
 pip install discord.py
 pip install livesplit
 pip install pandas
@@ -43,7 +38,7 @@ pip install pandas
 
 Go to resources/Billyfont.ttf and install the font (open -> top left, or right click -> install)
 
-To import the billy relay race scene collection, go into OBS, click Scene Collection -> import, and choose the BillyRelayRace.json file in resources. You will probably get many warnings about missing resources, in which case you should 
+To import the billy relay race scene collection, go into OBS, click Scene Collection -> import, and choose the BillyRelayRace.json file in resources. You will probably get many warnings about missing resources, in which case you should adjust paths to this repo's downloaded resources folder. Some files may still not update such as the Team Current Audio Icons, so be extremely sure that these get updated manually.
 
 Open Livesplit, right click -> Open splits -> from file -> resources/BillyRelayLivesplitSplits.lss
 Right click livesplit -> Open Layout -> from file -> resources/BillyRelayLivesplitLayout.lsl
@@ -72,7 +67,7 @@ python3 .\relaybot.py
 ```
 in the BillyRelayBot folder.
 
-This should activate the bot, who should say "bot initialized" in the discord relay race discussion chat.
+This should activate the bot, who should say "bot initialized" in the discord relay race bot chat.
 
 Now wait just small bit until python says:
 > INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: 11653a9388c2294d27dfe5a92018d06e).
