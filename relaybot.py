@@ -11,20 +11,59 @@ from shutil import copy
 import os
 import livesplit
 
-admins = [
-    "WitherMan#0111",
-    "Christian Royle#6808",
-    "Ludavis#4854",
-    "Exeloar#7295"
-]
+# Global Data
+isStarted = False
+startTime = 0
+admins = []
+currentScene = ""
+currentPlayer = [0,0,0]
+teamEmblemCounts = [0,0,0]
+teamTimes = [0,0,0]
+teams = []
+teamReady = [False,False,False]
+teamFinished = [False,False,False]
+client = discord.Client(intents = discord.Intents(message_content = True, messages=True, voice_states=True, guilds=True))
+commentators = []
+
+# INITIALIZE
+seed((Timestamp.now()-Timestamp(1970,1,1)).total_seconds())
+with open('admins.txt', 'r') as file:
+    for row in file:
+        admins.append(row.strip())
+
+with open('teams.txt', 'r') as file:
+    for row in file:
+        teams.append(row.strip().split(","))
+with open('resources/token.txt', 'r') as file:
+    TOKEN = file.read()
+with open('resources/BotChannelID.txt', 'r') as file:
+    BOT_CHANNEL_ID = int(file.read())
+try:
+    os.remove("resources/team1-activeaudioicon.png")
+except:
+    pass
+try:
+    os.remove("resources/team2-activeaudioicon.png")
+except:
+    pass
+try:
+    os.remove("resources/team3-activeaudioicon.png")
+except:
+    pass
+copy("resources/ActiveAudioIcon.png",f"resources/team1-activeaudioicon.png")
+
+relayFinished = True # Used to check for synchronization 
+currentAudioPlayer = teams[0][0]
+
+# CONNECTIONS
+
+# Livesplit
 LIVESPLIT_ENABLED = False
-OBS_ENABLED = True
-BOT_CHANNEL_ID = 0
-
-
 if LIVESPLIT_ENABLED:
     timer = livesplit.Livesplit(ip="localhost")
 
+# OBS
+OBS_ENABLED = True
 if OBS_ENABLED:
     host = "localhost"
     port = 4444
@@ -33,52 +72,8 @@ if OBS_ENABLED:
     ws = obsws(host, port)
     ws.connect()
 
-seed((Timestamp.now()-Timestamp(1970,1,1)).total_seconds())
-isStarted = False
-startTime = 0
-currentScene = ""
-currentPlayer = [
-    0,
-    0,
-    0
-]
-teamEmblemCounts = [
-    0,
-    0,
-    0
-]
-teamTimes = [
-    0,
-    0,
-    0
-]
-teams = [
-    ["Kosmic#5678","DatsunHLS30#6039","fleedle_deedle#2330","Exeloar#7295"],
-    ["Monkey#1665","SnapKick#9895","Brobey#5801","Clam#2923",],
-    ["tylltoons#4360","RealMim#8947","Kyrrone#1039","Samura1man#6028"]
-]
-teamReady = [
-    False,
-    False,
-    False
-]
-teamFinished = [
-    False,
-    False,
-    False
-]
-relayFinished = True # Used to check for synchronization 
-currentAudioPlayer = teams[0][0]
-
-with open('resources/token.txt', 'r') as file:
-    TOKEN = file.read()
-with open('resources/BotChannelID.txt', 'r') as file:
-    BOT_CHANNEL_ID = int(file.read())
-
-copy("resources/ActiveAudioIcon.png",f"resources/team1-activeaudioicon.png")
-
 def isAdmin(ctx):
-    return str(ctx.author) in admins
+    return str(ctx.author).split("#")[0] in admins
 
 async def handle_command(ctx):
     global currentPlayer
@@ -103,15 +98,17 @@ async def handle_command(ctx):
     if ctx.content.split(" ")[0] == "!forceready":
         if isAdmin(ctx):
             teamNum = int(ctx.content.split(" ")[1])
-            readyCommand(teamNum - 1)
-            await ctx.channel.send(f"Team #{teamNum} is now ready")
+            if 1<=teamNum<=3:
+                readyCommand(teamNum - 1)
+                await ctx.channel.send(f"Team #{teamNum} is now ready")
             return
 
     if ctx.content.split(" ")[0] == "!forceunready":
         if isAdmin(ctx):
             teamNum = int(ctx.content.split(" ")[1])
-            unreadyCommand(teamNum - 1)
-            await ctx.channel.send(f"Team #{teamNum} is no longer ready")
+            if 1<=teamNum<=3:
+                unreadyCommand(teamNum - 1)
+                await ctx.channel.send(f"Team #{teamNum} is no longer ready")
             return
 
     if ctx.content.split(" ")[0] == "!forceemblems":
@@ -179,7 +176,7 @@ async def handle_command(ctx):
             return
         for team in range(len(teams)):
             for player in range(len(teams[team])):
-                if teams[team][player] == str(ctx.author):
+                if teams[team][player] == str(ctx.author).split("#")[0]:
                     readyCommand(team)
                     await ctx.channel.send(f"Team #{team+1} is now ready")
                     return
@@ -189,7 +186,7 @@ async def handle_command(ctx):
             return
         for team in range(len(teams)):
             for player in range(len(teams[team])):
-                if teams[team][player] == str(ctx.author):
+                if teams[team][player] == str(ctx.author).split("#")[0]:
                     unreadyCommand(team)
                     await ctx.channel.send(f"Team #{team+1} is no longer ready")
                     return
@@ -198,7 +195,7 @@ async def handle_command(ctx):
         if isStarted:
             for team in range(len(teams)):
                 for player in range(len(teams[team])):
-                    if teams[team][player] == str(ctx.author):
+                    if teams[team][player] == str(ctx.author).split("#")[0]:
                         await nextCommand(team, currentPlayer[team], ctx)
                         break
                 else:
@@ -210,7 +207,7 @@ async def handle_command(ctx):
         if isStarted:
             for team in range(len(teams)):
                 for player in range(len(teams[team])):
-                    if teams[team][player] == str(ctx.author):
+                    if teams[team][player] == str(ctx.author).split("#")[0]:
                         await prevCommand(team, currentPlayer[team], ctx)
                         break
                 else:
@@ -402,32 +399,14 @@ def resetState():
     isStarted = False
     startTime = 0
     currentScene = 0
-    currentPlayer = [
-        0,
-        0,
-        0
-    ]
-    teamEmblemCounts = [
-        0,
-        0,
-        0
-    ]
-    teamTimes = [
-        0,
-        0,
-        0
-    ]
-    teamReady = [
-        False,
-        False,
-        False
-    ]
+    currentPlayer = [0,0,0]
+    teamEmblemCounts = [0,0,0]
+    teamTimes = [0,0,0]
+    teamReady = [False,False,False]
     relayFinished = False
     updateSceneName()
     
-client = discord.Client(intents = discord.Intents(message_content = True, messages=True, voice_states=True, guilds=True))
 
-commentators = []
 
 def refreshCommentators():
     with open(f'resources/commentators.txt', 'w') as file:
@@ -447,8 +426,11 @@ async def on_voice_state_update(member, before, after):
 
 @client.event
 async def on_ready():
-    channel = client.get_channel(BOT_CHANNEL_ID)
-    await channel.send('Bot is initialized')
+    try:
+        channel = client.get_channel(BOT_CHANNEL_ID)
+        await channel.send('Bot is initialized')
+    except Exception as e:
+        print(e)
 
 @client.event
 async def on_message(ctx):
