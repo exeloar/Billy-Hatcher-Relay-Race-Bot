@@ -1,5 +1,8 @@
 obssetup.py
 resources/token.txt
 resources/BotChannelID.txt
+resources/team1-activeaudioicon.png
+resources/team2-activeaudioicon.png
+resources/team3-activeaudioicon.png
 .vscode/
 
